@@ -9,6 +9,8 @@ const { filter } = require("lodash");
 
 const moment = require("moment");
 const _ = require("lodash");
+const debug = require("debug")("stock");
+
 class StocksimCommand extends Command {
     async run() {
         const { args, flags } = this.parse(StocksimCommand);
@@ -17,6 +19,10 @@ class StocksimCommand extends Command {
 
         let options = {
             initBalance: 100000, // 初始资金余额
+            N: 1, // 动能平均天数
+            P: 0.5, // 动能突破买入百分比
+            L: 0.5, // 动能突破卖出百分比
+            S: 0.05, // 止损比例
         };
 
         // 首先根据设置获得列表，列表内容为需要进行算法计算的各个股票
@@ -67,9 +73,9 @@ class StocksimCommand extends Command {
 
                 // 首先过滤历史数据，这里将日线数据调整为正常日期从历史到现在
                 stockData = await filterStockData(stockData);
-                for (let i = 0; i < stockData.data.length; i += 1000) {
-                    this.log(`第${i}天的数据：%o`, stockData.data[i]);
-                }
+                // for (let i = 0; i < stockData.data.length; i += 1000) {
+                //     this.log(`第${i}天的数据：%o`, stockData.data[i]);
+                // }
                 // this.log("%o", stockData.data[5000]);
                 // let index = 0;
                 // for (let index = 0; index < 10; index++) {
@@ -80,25 +86,36 @@ class StocksimCommand extends Command {
                 let startDate = moment("20180101", "YYYYMMDD");
                 let currentDate = null;
                 for (let index = 0; index < stockData.data.length; index++) {
-                    let data = stockData.data[index];
-                    let tradeDate = moment(data.trade_date, "YYYYMMDD");
+                    let daily = stockData.data[index];
+                    let tradeDate = moment(daily.trade_date, "YYYYMMDD");
                     if (_.isEmpty(currentDate)) {
                         if (startDate.isAfter(tradeDate)) {
                             continue;
                         }
+                        this.log(
+                            `找到开始日期，开始执行算法！${index}, ${daily.trade_date}`
+                        );
                     }
                     currentDate = tradeDate;
                     let trans = await executeTransaction(
                         currentDate,
                         index,
-                        stockData,
+                        stockData.data,
                         stockItem,
-                        capitalData
+                        capitalData,
+                        options
                     );
 
                     // 返回值代表产生的交易
                     if (trans) {
-                        this.log(`${data.trade_date} 产生交易: %o`, trans);
+                        // this.log(`${daily.trade_date} 产生交易: %o`, trans);
+                        // this.log(
+                        //     `交易： ${
+                        //         trans.type === "buy" ? "买" : "卖"
+                        //     }, 余额：${capitalData.balance.toFixed(2)}, ${
+                        //         trans.memo
+                        //     }`
+                        // );
                     } else {
                         // this.log(`${data.trade_date} 没有交易！`);
                     }
@@ -155,9 +172,8 @@ async function executeTransaction(
     capitalData,
     options
 ) {
-    // let currentDayData = stockData.data[index];
-
     // 首先检查卖出
+    // debug("执行卖出检查");
     let translog = checkMMBSellTransaction(
         capitalData && capitalData.stock,
         tradeDate,
@@ -165,9 +181,25 @@ async function executeTransaction(
         stockData,
         options
     );
-    executeCapitalSettlement(tradeDate, stockInfo, translog, capitalData);
+    if (executeCapitalSettlement(tradeDate, stockInfo, translog, capitalData)) {
+        console.log(
+            `卖出交易：${tradeDate.format(
+                "YYYYMMDD"
+            )}，价格：${translog.price.toFixed(2)}元，数量：${
+                translog.count / 100
+            }手，总价：${translog.total.toFixed(
+                2
+            )}元[佣金${translog.commission.toFixed(
+                2
+            )}元，过户费${translog.fee.toFixed(
+                2
+            )}，印花税${translog.duty.toFixed(2)}元], ${translog.memo}`
+        );
+        // return translog;
+    }
 
     // 检查止损
+    // debug("执行止损检查");
     translog = checkStoplossTransaction(
         capitalData && capitalData.stock,
         tradeDate,
@@ -175,19 +207,52 @@ async function executeTransaction(
         stockData,
         options
     );
-    executeCapitalSettlement(tradeDate, stockInfo, translog, capitalData);
+    if (executeCapitalSettlement(tradeDate, stockInfo, translog, capitalData)) {
+        console.log(
+            `卖出交易：${tradeDate.format(
+                "YYYYMMDD"
+            )}，价格：${translog.price.toFixed(2)}元，数量：${
+                translog.count / 100
+            }手，总价：${translog.total.toFixed(
+                2
+            )}元[佣金${translog.commission.toFixed(
+                2
+            )}元，过户费${translog.fee.toFixed(
+                2
+            )}，印花税${translog.duty.toFixed(2)}元], ${translog.memo}`
+        );
+        // return translog;
+    }
 
     // 执行买入
+    // debug("执行买入检查");
     translog = checkMMBBuyTransaction(
         capitalData.balance,
+        stockInfo,
         tradeDate,
         index,
         stockData,
         options
     );
-    executeCapitalSettlement(tradeDate, stockInfo, translog, capitalData);
-
-    return null;
+    // debug(`买入结果：%o`, translog);
+    if (executeCapitalSettlement(tradeDate, stockInfo, translog, capitalData)) {
+        console.log(
+            `买入交易：${tradeDate.format(
+                "YYYYMMDD"
+            )}，价格：${translog.price.toFixed(2)}元，数量：${
+                translog.count / 100
+            }手，总价：${translog.total.toFixed(
+                2
+            )}元[佣金${translog.commission.toFixed(
+                2
+            )}元，过户费${translog.fee.toFixed(
+                2
+            )}，印花税${translog.duty.toFixed(2)}元], ${translog.memo}`
+        );
+        // debug(`股票信息：%o`, stockInfo);
+        // debug(`账户信息：%o`, capitalData);
+        // return translog;
+    }
 }
 
 /**
@@ -198,8 +263,16 @@ async function executeTransaction(
  * @param {*} stockData 数据
  * @param {*} options 算法参数
  */
-function checkMMBBuyTransaction(balance, tradeDate, index, stockData, options) {
+function checkMMBBuyTransaction(
+    balance,
+    stockInfo,
+    tradeDate,
+    index,
+    stockData,
+    options
+) {
     if (balance <= 0) return;
+    // debug(`买入检查: %o, ${index}`, stockData);
 
     // 平均波幅的计算日数
     let N = (options && options.N) || 1;
@@ -209,7 +282,7 @@ function checkMMBBuyTransaction(balance, tradeDate, index, stockData, options) {
     let moment = 0;
     for (let i = 0; i < N; i++) {
         if (index - i - 1 >= 0) {
-            let tmp = stockData.data[index - i - 1];
+            let tmp = stockData[index - i - 1];
             moment += tmp.high - tmp.low;
         }
     }
@@ -218,9 +291,25 @@ function checkMMBBuyTransaction(balance, tradeDate, index, stockData, options) {
     let currentData = stockData[index];
     let targetPrice = currentData.open + moment * P;
 
+    debug(
+        `买入条件检查${tradeDate.format("YYYYMMDD")}: ${targetPrice}=${
+            currentData.open
+        }+${moment.toFixed(2)}*${P} [o: ${currentData.open}, h: ${
+            currentData.high
+        }, l: ${currentData.low}]`
+    );
     if (currentData.high >= targetPrice && currentData.low <= targetPrice) {
         // 执行买入交易
-        return createBuyTransaction(stockInfo, tradeDate, balance, targetPrice);
+        debug(`符合条件：${tradeDate.format("YYYYMMDD")}`);
+        return createBuyTransaction(
+            stockInfo,
+            tradeDate,
+            balance,
+            targetPrice,
+            `动能突破买入 ${targetPrice.toFixed(2)} (=${
+                currentData.open
+            }+${moment.toFixed(2)}*${(P * 100).toFixed(2)}%)`
+        );
     }
 }
 
@@ -249,35 +338,39 @@ function checkMMBSellTransaction(stock, tradeDate, index, stockData, options) {
             stock.info,
             tradeDate,
             stock.count,
-            currentData.open
+            currentData.open,
+            `开盘盈利卖出 ${currentData.open} (> ${stock.price.toFixed(2)})`
         );
     }
 
-    // 有持仓，检查是否达到卖出条件
-    // 第一个卖出条件是买入后按照买入价格及波动数据的反向百分比设置
-    let moment = 0;
-    for (let i = 0; i < N; i++) {
-        if (index - i - 1 >= 0) {
-            let tmp = stockData.data[index - i - 1];
-            moment += tmp.high - tmp.low;
-        }
-    }
-    moment = moment / N;
+    // // 有持仓，检查是否达到卖出条件
+    // // 第一个卖出条件是买入后按照买入价格及波动数据的反向百分比设置
+    // let moment = 0;
+    // for (let i = 0; i < N; i++) {
+    //     if (index - i - 1 >= 0) {
+    //         let tmp = stockData[index - i - 1];
+    //         moment += tmp.high - tmp.low;
+    //     }
+    // }
+    // moment = moment / N;
 
-    let targetPrice = currentData.open - moment * L;
-    // let targetPrice2 = stock.price - moment * L;
-    // let targetPrice =
-    //     targetPrice1 >= targetPrice2 ? targetPrice1 : targetPrice2;
+    // let targetPrice = currentData.open - moment * L;
+    // // let targetPrice2 = stock.price - moment * L;
+    // // let targetPrice =
+    // //     targetPrice1 >= targetPrice2 ? targetPrice1 : targetPrice2;
 
-    if (targetPrice <= currentData.high && targetPrice >= currentData.low) {
-        // 执行波动卖出
-        return createSellTransaction(
-            stock.info,
-            tradeDate,
-            stock.count,
-            targetPrice
-        );
-    }
+    // if (targetPrice <= currentData.high && targetPrice >= currentData.low) {
+    //     // 执行波动卖出
+    //     return createSellTransaction(
+    //         stock.info,
+    //         tradeDate,
+    //         stock.count,
+    //         targetPrice,
+    //         `动能突破卖出：${targetPrice.toFixed(2)} (= ${
+    //             currentData.open
+    //         }-${moment.toFixed(2)}*${L * 100}%)`
+    //     );
+    // }
 }
 
 /**
@@ -301,7 +394,10 @@ function checkStoplossTransaction(stock, tradeDate, index, stockData, options) {
             stock.info,
             tradeDate,
             stock.count,
-            lossPrice
+            lossPrice,
+            `止损 ${lossPrice.toFixed(2)} (=${stock.price.toFixed(2)}*(1-${
+                S * 100
+            }%))`
         );
     }
 }
@@ -314,9 +410,10 @@ function checkStoplossTransaction(stock, tradeDate, index, stockData, options) {
  * @param {*} capitalData 账户数据
  */
 function executeCapitalSettlement(tradeDate, stockInfo, translog, capitalData) {
+    // debug(`执行清算 %o`, translog);
     if (_.isEmpty(translog)) return false;
     if (translog.total + capitalData.balance < 0) {
-        this.log(
+        console.log(
             `账户余额${capitalData.balance}不足(${
                 translog.total
             })，无法完成清算，交易取消! 交易信息: ${
@@ -330,7 +427,7 @@ function executeCapitalSettlement(tradeDate, stockInfo, translog, capitalData) {
         return false;
     }
     capitalData.balance += translog.total;
-    if (translog.type === "sell") {
+    if (translog.type === "buy") {
         capitalData.stock = {
             info: stockInfo,
             count: translog.count,
@@ -343,7 +440,8 @@ function executeCapitalSettlement(tradeDate, stockInfo, translog, capitalData) {
             price: 0,
         };
     }
-    capitalData.push(translog);
+    capitalData.transactions.push(translog);
+    // debug("完成清算！");
     return true;
 }
 
@@ -354,20 +452,21 @@ function executeCapitalSettlement(tradeDate, stockInfo, translog, capitalData) {
  * @param {*} count
  * @param {*} price
  */
-function createSellTransaction(stockInfo, tradeDate, count, price) {
+function createSellTransaction(stockInfo, tradeDate, count, price, memo) {
     // 计算费用
     let total = calculateTransactionFee(false, stockInfo, count, price);
     // 创建卖出交易记录
-    let tranlog = {
+    return {
         date: tradeDate.format("YYYYMMDD"),
         type: "sell",
-        count: capitalData.stock.count,
-        price: currentDayData.open,
+        count,
+        price,
         total: total.total,
         amount: total.amount,
         fee: total.fee,
         commission: total.commission,
         duty: total.duty,
+        memo,
     };
 }
 
@@ -378,20 +477,24 @@ function createSellTransaction(stockInfo, tradeDate, count, price) {
  * @param {*} balance 可用余额
  * @param {*} price 买入价格
  */
-function createBuyTransaction(stockInfo, tradeDate, balance, price) {
+function createBuyTransaction(stockInfo, tradeDate, balance, price, memo) {
     // 计算费用
+    let count = parseInt(balance / price / 100) * 100;
+    // 最小交易单位为1手，资金不足放弃！
+    if (count < 100) return;
     let total = calculateTransactionFee(true, stockInfo, count, price);
-    // 创建卖出交易记录
-    let tranlog = {
+    // 创建买入交易记录
+    return {
         date: tradeDate.format("YYYYMMDD"),
         type: "buy",
-        count: capitalData.stock.count,
-        price: currentDayData.open,
+        count: count,
+        price,
         total: total.total,
         amount: total.amount,
         fee: total.fee,
         commission: total.commission,
         duty: total.duty,
+        memo,
     };
 }
 
@@ -405,8 +508,8 @@ function createBuyTransaction(stockInfo, tradeDate, balance, price) {
 function calculateTransactionFee(buy, stockInfo, count, price) {
     let amount = count * price;
     let commission = (amount * 0.25) / 1000;
-    let fee = 0;
-    let duty = 0;
+    let fee = 0.0;
+    let duty = 0.0;
     if (stockInfo.exchange === "SSE") {
         // 上海，过户费千分之0.2
         fee += (amount * 0.02) / 1000;
@@ -418,9 +521,9 @@ function calculateTransactionFee(buy, stockInfo, count, price) {
         duty += (amount * 1) / 1000;
     }
 
-    let total = 0;
+    let total = 0.0;
     if (buy) {
-        total = 0 - amount - commission - fee - duty;
+        total = 0 - (amount + commission + fee + duty);
     } else {
         total = amount - commission - fee - duty;
     }
