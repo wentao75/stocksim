@@ -53,8 +53,8 @@ class StocksimCommand extends Command {
             // 准备资金账户数据
             let capitalData = {
                 balance: options.initBalance, // 初始资金
-                stock: { tsCode: null, count: 0, price: 0 }, // 持有股票信息
-                transactions: [], // 交易记录 {date: , count: 交易数量, price: 交易价格, total: 总金额, amount: 总价, fee: 交易费用,}
+                stock: { info: null, count: 0, price: 0 }, // 持有股票信息
+                transactions: [], // 交易记录 {date: , count: 交易数量, price: 交易价格, total: 总金额, amount: 总价, fee: 交易费用, memo: 备注信息}
             };
             if (stockData) {
                 this.log(
@@ -155,52 +155,244 @@ async function executeTransaction(
     capitalData,
     options
 ) {
-    let transLog = [];
-    let currentDayData = stockData.data[index];
+    // let currentDayData = stockData.data[index];
+
+    // 首先检查卖出
+    let translog = checkMMBSellTransaction(
+        capitalData && capitalData.stock,
+        tradeDate,
+        index,
+        stockData,
+        options
+    );
+    executeCapitalSettlement(tradeDate, stockInfo, translog, capitalData);
+
+    // 检查止损
+    translog = checkStoplossTransaction(
+        capitalData && capitalData.stock,
+        tradeDate,
+        index,
+        stockData,
+        options
+    );
+    executeCapitalSettlement(tradeDate, stockInfo, translog, capitalData);
+
+    // 执行买入
+    translog = checkMMBBuyTransaction(
+        capitalData.balance,
+        tradeDate,
+        index,
+        stockData,
+        options
+    );
+    executeCapitalSettlement(tradeDate, stockInfo, translog, capitalData);
+
+    return null;
+}
+
+/**
+ * 检查买入条件
+ * @param {double} balance 账户余额
+ * @param {*} tradeDate 交易日期
+ * @param {int} index 交易日数据索引位置
+ * @param {*} stockData 数据
+ * @param {*} options 算法参数
+ */
+function checkMMBBuyTransaction(balance, tradeDate, index, stockData, options) {
+    if (balance <= 0) return;
 
     // 平均波幅的计算日数
     let N = (options && options.N) || 1;
     // 波幅突破的百分比
     let P = (options && options.P) || 0.5;
-    // 止损使用的波幅下降百分比
-    let L = (options && options.L) || 0.5;
-    // 止损最大损失比例
-    let S = (options && options.S) || 0.1;
 
-    if (capitalData && capitalData.stock && capitalData.stock.count > 0) {
-        // 目前有持仓，计算卖出条件或者止损
-        if (currentDayData.open > capitalData.stock.price) {
-            // 采用第二天开盘价盈利就卖出的策略
-            // 计算费用
-            let total = calculateTransactionFee(
-                false,
-                stockInfo,
-                capitalData.stock.count,
-                currentDayData.open
-            );
-            // 创建交易记录
-            let tranlog = {
-                date: tradeDate.format("YYYYMMDD"),
-                count: capitalData.stock.count,
-                price: currentDayData.open,
-                total: total.total,
-                amount: total.amount,
-                fee: total.fee,
-                commission: total.commission,
-                duty: total.duty,
-            };
-        }
-    }
-
-    let total_moment = 0;
+    let moment = 0;
     for (let i = 0; i < N; i++) {
         if (index - i - 1 >= 0) {
             let tmp = stockData.data[index - i - 1];
-            total_moment += tmp.high - tmp.low;
+            moment += tmp.high - tmp.low;
         }
     }
+    moment = moment / N;
 
-    return null;
+    let currentData = stockData[index];
+    let targetPrice = currentData.open + moment * P;
+
+    if (currentData.high >= targetPrice && currentData.low <= targetPrice) {
+        // 执行买入交易
+        return createBuyTransaction(stockInfo, tradeDate, balance, targetPrice);
+    }
+}
+
+/**
+ * 检查是否可以生成卖出交易，如果可以卖出，产生卖出交易记录
+ *
+ * @param {*} stock 持仓信息
+ * @param {*} tradeDate 交易日
+ * @param {*} index 今日数据索引位置
+ * @param {*} stockData 日线数据
+ * @param {*} options 算法参数
+ */
+function checkMMBSellTransaction(stock, tradeDate, index, stockData, options) {
+    if (_.isEmpty(stock) || stock.count <= 0) return;
+
+    // 平均波幅的计算日数
+    let N = (options && options.N) || 1;
+    // 止损使用的波幅下降百分比
+    let L = (options && options.L) || 0.5;
+    let currentData = stockData[index];
+
+    // 目前有持仓，检查是否达到盈利卖出条件
+    if (currentData.open > stock.price) {
+        // 采用第二天开盘价盈利就卖出的策略
+        return createSellTransaction(
+            stock.info,
+            tradeDate,
+            stock.count,
+            currentData.open
+        );
+    }
+
+    // 有持仓，检查是否达到卖出条件
+    // 第一个卖出条件是买入后按照买入价格及波动数据的反向百分比设置
+    let moment = 0;
+    for (let i = 0; i < N; i++) {
+        if (index - i - 1 >= 0) {
+            let tmp = stockData.data[index - i - 1];
+            moment += tmp.high - tmp.low;
+        }
+    }
+    moment = moment / N;
+
+    let targetPrice = currentData.open - moment * L;
+    // let targetPrice2 = stock.price - moment * L;
+    // let targetPrice =
+    //     targetPrice1 >= targetPrice2 ? targetPrice1 : targetPrice2;
+
+    if (targetPrice <= currentData.high && targetPrice >= currentData.low) {
+        // 执行波动卖出
+        return createSellTransaction(
+            stock.info,
+            tradeDate,
+            stock.count,
+            targetPrice
+        );
+    }
+}
+
+/**
+ * 检查是否需要执行止损
+ * @param {*} stock 持仓信息
+ * @param {*} tradeDate 交易日期
+ * @param {int} index 交易日索引位置
+ * @param {*} stockData 日线数据
+ */
+function checkStoplossTransaction(stock, tradeDate, index, stockData, options) {
+    if (_.isEmpty(stock) || stock.count <= 0) return;
+    let currentData = stockData[index];
+    // 止损最大损失比例
+    let S = (options && options.S) || 0.1;
+
+    // 这里检查纯粹的百分比止损
+    let lossPrice = stock.price * (1 - S);
+    if (currentData.high >= lossPrice && currentData.low <= lossPrice) {
+        // 当日价格范围达到止损值
+        return createSellTransaction(
+            stock.info,
+            tradeDate,
+            stock.count,
+            lossPrice
+        );
+    }
+}
+
+/**
+ * 根据交易记录完成账户清算
+ * @param {*} tradeDate 交易日期
+ * @param {*} stockInfo 股票信息
+ * @param {*} translog 交易记录
+ * @param {*} capitalData 账户数据
+ */
+function executeCapitalSettlement(tradeDate, stockInfo, translog, capitalData) {
+    if (_.isEmpty(translog)) return false;
+    if (translog.total + capitalData.balance < 0) {
+        this.log(
+            `账户余额${capitalData.balance}不足(${
+                translog.total
+            })，无法完成清算，交易取消! 交易信息: ${
+                translog.type === "buy" ? "买入" : "卖出"
+            }${stockInfo.ts_code} ${translog.count}股，价格${
+                translog.price
+            }，共计${translog.total}元[含佣金${translog.commission}元，过户费${
+                translog.fee
+            }，印花税${translog.duty}元]`
+        );
+        return false;
+    }
+    capitalData.balance += translog.total;
+    if (translog.type === "sell") {
+        capitalData.stock = {
+            info: stockInfo,
+            count: translog.count,
+            price: translog.price,
+        };
+    } else {
+        capitalData.stock = {
+            info: null,
+            count: 0,
+            price: 0,
+        };
+    }
+    capitalData.push(translog);
+    return true;
+}
+
+/**
+ * 创建指定日期和股票信息的卖出交易
+ * @param {*} stockInfo
+ * @param {*} tradeDate
+ * @param {*} count
+ * @param {*} price
+ */
+function createSellTransaction(stockInfo, tradeDate, count, price) {
+    // 计算费用
+    let total = calculateTransactionFee(false, stockInfo, count, price);
+    // 创建卖出交易记录
+    let tranlog = {
+        date: tradeDate.format("YYYYMMDD"),
+        type: "sell",
+        count: capitalData.stock.count,
+        price: currentDayData.open,
+        total: total.total,
+        amount: total.amount,
+        fee: total.fee,
+        commission: total.commission,
+        duty: total.duty,
+    };
+}
+
+/**
+ * 构建买入交易信息
+ * @param {*} stockInfo 股票信息
+ * @param {*} tradeDate 交易日期
+ * @param {*} balance 可用余额
+ * @param {*} price 买入价格
+ */
+function createBuyTransaction(stockInfo, tradeDate, balance, price) {
+    // 计算费用
+    let total = calculateTransactionFee(true, stockInfo, count, price);
+    // 创建卖出交易记录
+    let tranlog = {
+        date: tradeDate.format("YYYYMMDD"),
+        type: "buy",
+        count: capitalData.stock.count,
+        price: currentDayData.open,
+        total: total.total,
+        amount: total.amount,
+        fee: total.fee,
+        commission: total.commission,
+        duty: total.duty,
+    };
 }
 
 /**
