@@ -24,9 +24,45 @@ async function executeTransaction(
     capitalData,
     options
 ) {
+    let translog = null;
     // 首先检查卖出
+    // 所有算法首先检查并处理止损
+    // 检查是否需要止损
+    if (options.stoploss) {
+        translog = options.stoploss.checkStoplossTransaction(
+            capitalData && capitalData.stock,
+            tradeDate,
+            index,
+            stockData,
+            options
+        );
+        if (
+            executeCapitalSettlement(
+                tradeDate,
+                stockInfo,
+                translog,
+                capitalData
+            )
+        ) {
+            debug(
+                `卖出止损：${tradeDate.format("YYYYMMDD")}，价格：${formatFxstr(
+                    translog.price
+                )}元，数量：${
+                    translog.count / 100
+                }手，总价：${translog.total.toFixed(
+                    2
+                )}元[佣金${translog.commission.toFixed(
+                    2
+                )}元，过户费${translog.fee.toFixed(
+                    2
+                )}，印花税${translog.duty.toFixed(2)}元], ${translog.memo}`
+            );
+            // return translog;
+        }
+    }
+
     // debug("执行卖出检查");
-    let translog = tradeMethod.checkSellTransaction(
+    translog = tradeMethod.checkSellTransaction(
         capitalData && capitalData.stock,
         tradeDate,
         index,
@@ -50,32 +86,7 @@ async function executeTransaction(
         // return translog;
     }
 
-    // // 检查止损
-    // // debug("执行止损检查");
-    // translog = slMethod.checkSellTransaction(
-    //     capitalData && capitalData.stock,
-    //     tradeDate,
-    //     index,
-    //     stockData,
-    //     options
-    // );
-    // if (executeCapitalSettlement(tradeDate, stockInfo, translog, capitalData)) {
-    //     console.log(
-    //         `卖出交易：${tradeDate.format(
-    //             "YYYYMMDD"
-    //         )}，价格：${translog.price.toFixed(2)}元，数量：${
-    //             translog.count / 100
-    //         }手，总价：${translog.total.toFixed(
-    //             2
-    //         )}元[佣金${translog.commission.toFixed(
-    //             2
-    //         )}元，过户费${translog.fee.toFixed(
-    //             2
-    //         )}，印花税${translog.duty.toFixed(2)}元], ${translog.memo}`
-    //     );
-    //     // return translog;
-    // }
-
+    // 检查是否仍然有持仓
     if (capitalData && capitalData.stock && capitalData.stock.count > 0) return;
     // 执行买入
     // debug("执行买入检查");
@@ -118,6 +129,7 @@ async function executeTransaction(
 function executeCapitalSettlement(tradeDate, stockInfo, translog, capitalData) {
     // debug(`执行清算 %o`, translog);
     if (_.isEmpty(translog)) return false;
+    // 检查当前提供的交易是否可以进行，主要是针对买入交易是否会造成余额不足
     if (translog.total + capitalData.balance < 0) {
         debug(
             `账户余额${capitalData.balance}不足(${
@@ -132,21 +144,34 @@ function executeCapitalSettlement(tradeDate, stockInfo, translog, capitalData) {
         );
         return false;
     }
+
+    // 处理交易信息
     capitalData.balance += translog.total;
+    // 如果当前买入，stock中放置持股信息和买入交易日志，只有卖出发生时才合并生成一条交易记录，包含两个部分
     if (translog.type === "buy") {
         capitalData.stock = {
             info: stockInfo,
             count: translog.count,
             price: translog.price,
+            buy: translog,
         };
     } else {
+        let settledlog = {
+            tradeDate: translog.tradeDate,
+            profit: capitalData.stock.buy.total + translog.total,
+            income:
+                translog.count * translog.price -
+                capitalData.stock.count * capitalData.stock.price,
+            buy: capitalData.stock.buy,
+            sell: translog,
+        };
         capitalData.stock = {
             info: null,
             count: 0,
             price: 0,
         };
+        capitalData.transactions.push(settledlog);
     }
-    capitalData.transactions.push(translog);
     // debug("完成清算！");
     return true;
 }
@@ -242,10 +267,59 @@ function calculateTransactionFee(buy, stockInfo, count, price) {
     return { total, amount, commission, fee, duty };
 }
 
+function formatFxstr(num) {
+    return num.toLocaleString("zh-CN", { style: "currency", currency: "CNY" });
+}
+
+function parseCapital(capitalData) {
+    if (_.isEmpty(capitalData)) return;
+    // 账户信息中主要需分析交易过程，正常都是为一次买入，一次卖出，这样作为一组交易，获得一次盈利结果
+    let count_win = 0;
+    let total_win = 0;
+    let count_loss = 0;
+    let total_loss = 0;
+    let total_profit = 0;
+    let total_fee = 0;
+    let max_profit = 0;
+    let max_loss = 0;
+    let average_profit = 0;
+    let average_loss = 0;
+    for (let log of capitalData.transactions) {
+        if (log.profit >= 0) {
+            count_win++;
+            total_win += log.profit;
+            if (max_profit < log.profit) max_profit = log.profit;
+        } else {
+            count_loss++;
+            total_loss += log.profit;
+            if (max_loss > log.profit) max_loss = log.profit;
+        }
+        total_profit += log.profit;
+        total_fee +=
+            log.buy.commission +
+            log.buy.fee +
+            log.buy.duty +
+            (log.sell.commission + log.sell.fee + log.sell.duty);
+    }
+
+    return {
+        count: capitalData.transactions.length,
+        total_profit,
+        total_fee,
+        count_win,
+        total_win,
+        count_loss,
+        total_loss,
+        max_profit,
+        max_loss,
+    };
+}
+
 module.exports = {
     executeTransaction,
     executeCapitalSettlement,
     createSellTransaction,
     createBuyTransaction,
     calculateTransactionFee,
+    parseCapital,
 };

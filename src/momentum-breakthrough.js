@@ -79,22 +79,7 @@ function checkMMBBuyTransaction(
 function checkMMBSellTransaction(stock, tradeDate, index, stockData, options) {
     if (_.isEmpty(stock) || stock.count <= 0) return;
 
-    // 检查是否需要止损
-    if (options.stoploss) {
-        let translog = options.stoploss.checkStoplossTransaction(
-            stock,
-            tradeDate,
-            index,
-            stockData,
-            options
-        );
-        if (translog) {
-            debug(`止损符合：${translog.memo}`);
-            return translog;
-        }
-    }
-
-    // 不需要止损，检查是否符合买入条件
+    // 检查是否符合动能突破买入条件
     if (
         !_.isEmpty(
             checkMMBBuyTransaction(
@@ -114,7 +99,7 @@ function checkMMBSellTransaction(stock, tradeDate, index, stockData, options) {
     let currentData = stockData[index];
 
     // 目前有持仓，检查是否达到盈利卖出条件
-    if (currentData.open > stock.price) {
+    if (options.OS && currentData.open > stock.price) {
         // 采用第二天开盘价盈利就卖出的策略
         debug(
             `开盘盈利策略符合：${currentData.open.toFixed(
