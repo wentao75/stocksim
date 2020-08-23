@@ -58,8 +58,10 @@ function checkMMBBuyTransaction(
         return engine.createBuyTransaction(
             stockInfo,
             tradeDate,
+            index,
             balance,
             targetPrice,
+            "mmb",
             `动能突破买入 ${targetPrice.toFixed(2)} (=${
                 currentData.open
             }+${moment.toFixed(2)}*${(P * 100).toFixed(2)}%)`
@@ -109,8 +111,10 @@ function checkMMBSellTransaction(stock, tradeDate, index, stockData, options) {
         return engine.createSellTransaction(
             stock.info,
             tradeDate,
+            index,
             stock.count,
             currentData.open,
+            "mmb1",
             `开盘盈利卖出 ${currentData.open} (> ${stock.price.toFixed(2)})`
         );
     }
@@ -144,8 +148,10 @@ function checkMMBSellTransaction(stock, tradeDate, index, stockData, options) {
         return engine.createSellTransaction(
             stock.info,
             tradeDate,
+            index,
             stock.count,
             targetPrice,
+            "mmb2",
             `动能突破卖出：${targetPrice.toFixed(2)} (= ${
                 currentData.open
             }-${moment.toFixed(2)}*${L * 100}%)`
@@ -156,6 +162,11 @@ function checkMMBSellTransaction(stock, tradeDate, index, stockData, options) {
 module.exports = {
     name: "MMB",
     description: "动能穿透",
+    methodTyps: {
+        mmb: "动能突破买入",
+        mmb1: "开盘盈利卖出",
+        mmb2: "动能突破卖出",
+    },
     checkBuyTransaction: checkMMBBuyTransaction,
     checkSellTransaction: checkMMBSellTransaction,
 };

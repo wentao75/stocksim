@@ -21,33 +21,37 @@ class StocksimCommand extends Command {
         this.log(`执行算法： ${name}`);
 
         let options = {
-            initBalance: 100000, // 初始资金余额
+            fixCash: false, // 是否固定头寸
+            initBalance: 1000000, // 初始资金余额
             N: 1, // 动能平均天数
             P: 0.5, // 动能突破买入百分比
             L: 0.5, // 动能突破卖出百分比
             S: 0.1, // 止损比例
+
             mmbType: "hl", // 波幅类型，hc, hl
             OS: true, // 是否执行开盘价锁盈
             stoploss: sl, // 止损算法设置
             selectedStocks: [
                 "600489.SH",
                 "600276.SH",
-                "600363.SH",
-                "000725.SZ",
-                "600298.SH",
-                "300027.SZ",
-                "600511.SH",
-                "601606.SH",
-                "601628.SH",
+                // "600363.SH",
+                // "000725.SZ",
+                // "600298.SH",
+                // "300027.SZ",
+                // "600511.SH",
+                // "601606.SH",
+                // "601628.SH",
             ],
         };
 
         this.log(
-            `参数 初始资金：${options.initBalance}元，动能平均天数 ${
-                options.N
-            }, 动能突破买入 ${options.P * 100}%, 动能突破卖出 ${
-                options.L * 100
-            }%，止损比例 ${options.S * 100}%, 波幅类型 ${
+            `参数 初始资金：${formatFxstr(
+                options.initBalance
+            )}元，动能平均天数 ${options.N}, 动能突破买入 ${
+                options.P * 100
+            }%, 动能突破卖出 ${options.L * 100}%，止损比例 ${
+                options.S * 100
+            }%, 波幅类型 ${
                 options.mmbType === "hc" ? "最高-收盘" : "最高-最低"
             }`
         );
@@ -91,12 +95,17 @@ class StocksimCommand extends Command {
             };
             if (stockData) {
                 this.log(
-                    `[${stockItem.ts_code}]${stockItem.name} 日线数据条数 ${
-                        stockData.data && stockData.data.length
-                    }, 从${stockData.startDate}到${
-                        stockData.endDate
-                    }，更新时间：${stockData.updateTime}`
+                    `[${stockItem.ts_code}]${
+                        stockItem.name
+                    } 【数据更新时间：${moment(stockData.updateTime).format(
+                        "YYYY-MM-DD HH:mm"
+                    )}】`
                 );
+                // 日线数据条数 ${
+                //     stockData.data && stockData.data.length
+                // }, 从${stockData.startDate}到${
+                //     stockData.endDate
+                // }，
 
                 // 首先过滤历史数据，这里将日线数据调整为正常日期从历史到现在
                 stockData = await filterStockData(stockData);
@@ -129,81 +138,10 @@ class StocksimCommand extends Command {
                         capitalData,
                         options
                     );
-
-                    // // 返回值代表产生的交易
-                    // if (trans) {
-                    //     // this.log(`${daily.trade_date} 产生交易: %o`, trans);
-                    //     // this.log(
-                    //     //     `交易： ${
-                    //     //         trans.type === "buy" ? "买" : "卖"
-                    //     //     }, 余额：${capitalData.balance.toFixed(2)}, ${
-                    //     //         trans.memo
-                    //     //     }`
-                    //     // );
-                    // } else {
-                    //     // this.log(`${data.trade_date} 没有交易！`);
-                    // }
                 }
 
-                this.log(
-                    `************************************************************************************************************************`
-                );
-                // this.log(
-                //     "*                                                                                                                      *"
-                // );
-                if (capitalData.stock && capitalData.stock.count > 0) {
-                    this.log(
-                        `  账户价值 ${formatFxstr(
-                            capitalData.balance +
-                                capitalData.stock.count *
-                                    capitalData.stock.price
-                        )}元  【余额 ${formatFxstr(
-                            capitalData.balance
-                        )}元, 持股：${
-                            capitalData.stock.info.name
-                        } ${formatFxstr(
-                            capitalData.stock.count * capitalData.stock.price
-                        )}元】`
-                    );
-                } else {
-                    this.log(
-                        `  账户余额 ${formatFxstr(capitalData.balance)}元`
-                    );
-                }
-
-                let capitalResult = engine.parseCapital(capitalData);
-                // this.log(``);
-                this.log(
-                    `  总净利润：${formatFxstr(capitalResult.total_profit)}`
-                );
-                this.log(
-                    `  毛利润： ${formatFxstr(
-                        capitalResult.total_win
-                    )},  总亏损：${formatFxstr(capitalResult.total_loss)}`
-                );
-                this.log("");
-                this.log(
-                    `  总交易次数： ${capitalResult.count},  利润率：${(
-                        (capitalResult.count_win * 100) /
-                        capitalResult.count
-                    ).toFixed(1)}%`
-                );
-                this.log(
-                    `  总盈利次数： ${capitalResult.count_win},  总亏损次数：${capitalResult.count_loss}`
-                );
-                this.log("");
-                this.log(
-                    `  最大单笔盈利： ${formatFxstr(
-                        capitalResult.max_profit
-                    )},  最大单笔亏损：${formatFxstr(capitalResult.max_loss)}`
-                );
-                // this.log(
-                //     "*                                                                                                                      *"
-                // );
-                this.log(
-                    `************************************************************************************************************************`
-                );
-                this.log("");
+                engine.logCapitalReport(this.log, capitalData);
+                engine.logTransactions(this.log, capitalData);
             } else {
                 this.log(
                     `[${stockItem.ts_code}]${stockItem.name} 没有日线数据，请检查！`
@@ -246,11 +184,19 @@ function calculatePrevAdjPrice(dailyData, digits = 3) {
  * 这里后续考虑调整一下接口定义，目前暂时简化处理
  */
 async function filterStockList(stockList, options) {
-    let retStockList = stockList.filter((item) => {
-        return options.selectedStocks.indexOf(item.ts_code) >= 0;
+    // let retStockList = [];
+    return options.selectedStocks.map((tsCode) => {
+        let tmp = stockList.filter((item) => {
+            return item.ts_code === tsCode;
+        });
+        // console.log(`${tmp && tmp.length}, %o`, tmp[0]);
+        return tmp[0];
     });
+    // stockList.filter((item) => {
+    //     return options.selectedStocks.indexOf(item.ts_code) >= 0;
+    // });
     // retStockList.push(stockList[3000]);
-    return retStockList;
+    // return retStockList;
 }
 
 /**
@@ -265,7 +211,7 @@ async function filterStockData(stockData, options) {
 }
 
 function formatFxstr(num) {
-    return num.toLocaleString("zh-CN", { style: "currency", currency: "CNY" });
+    return num.toLocaleString("zh-CN"); //, { style: "currency", currency: "CNY" });
 }
 
 // /**

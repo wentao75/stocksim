@@ -21,8 +21,10 @@ function checkStoplossTransaction(stock, tradeDate, index, stockData, options) {
         return engine.createSellTransaction(
             stock.info,
             tradeDate,
+            index,
             stock.count,
             lossPrice,
+            "stoploss",
             `止损 ${lossPrice.toFixed(2)} (=${stock.price.toFixed(2)}*(1-${
                 S * 100
             }%))`
@@ -33,5 +35,8 @@ function checkStoplossTransaction(stock, tradeDate, index, stockData, options) {
 module.exports = {
     name: "SL",
     description: "止损",
+    methodTypes: {
+        stoploss: "止损卖出",
+    },
     checkStoplossTransaction,
 };
