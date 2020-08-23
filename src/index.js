@@ -18,18 +18,21 @@ class StocksimCommand extends Command {
     async run() {
         const { args, flags } = this.parse(StocksimCommand);
         const name = args.name;
-        this.log(`执行算法： ${name}`);
+        // this.log(
+        //     `执行算法： ${name}, ${flags.n} ${flags.profit} ${flags.loss} ${flags.stoploss}`
+        // );
 
         let options = {
-            fixCash: false, // 是否固定头寸
+            fixCash: flags.fixcash, // 是否固定头寸
             initBalance: 1000000, // 初始资金余额
-            N: 1, // 动能平均天数
-            P: 0.5, // 动能突破买入百分比
-            L: 0.5, // 动能突破卖出百分比
-            S: 0.1, // 止损比例
+
+            N: parseInt(flags.n), // 动能平均天数
+            P: Number(flags.profit), // 动能突破买入百分比
+            L: Number(flags.loss), // 动能突破卖出百分比
+            S: Number(flags.stoploss), // 止损比例
+            OS: flags.lockprofit, // 是否执行开盘价锁盈
 
             mmbType: "hl", // 波幅类型，hc, hl
-            OS: true, // 是否执行开盘价锁盈
             stoploss: sl, // 止损算法设置
             selectedStocks: [
                 "600489.SH",
@@ -44,14 +47,19 @@ class StocksimCommand extends Command {
             ],
         };
 
+        // if (!flags.n) options.N = parseInt(flags.n);
+        // if (!flags.profit) options.P = Number(flags.profit);
+        // if (!flags.loss) options.L = Number(flags.loss);
+        // if (!flags.stoploss) options.S = Number(flags.stoploss);
+
         this.log(
-            `参数 初始资金：${formatFxstr(
-                options.initBalance
-            )}元，动能平均天数 ${options.N}, 动能突破买入 ${
-                options.P * 100
-            }%, 动能突破卖出 ${options.L * 100}%，止损比例 ${
-                options.S * 100
-            }%, 波幅类型 ${
+            `参数 初始资金：${formatFxstr(options.initBalance)}元 ${
+                flags.fixcash ? "固定头寸" : "累计账户"
+            }
+动能平均天数 ${options.N}, 动能突破买入 ${options.P * 100}%, 动能突破卖出 ${
+                options.L * 100
+            }%，
+止损比例 ${options.S * 100}%, 开盘盈利锁定：${options.OS}, 波幅类型 ${
                 options.mmbType === "hc" ? "最高-收盘" : "最高-最低"
             }`
         );
@@ -603,7 +611,7 @@ StocksimCommand.description = `Describe the command here
 StocksimCommand.args = [
     {
         name: "name",
-        required: true,
+        required: false,
         description: "算法代码，用于指定执行哪个算法",
     },
 ];
@@ -613,6 +621,37 @@ StocksimCommand.flags = {
     version: flags.version({ char: "v" }),
     // add --help flag to show CLI version
     help: flags.help({ char: "h" }),
+
+    n: flags.string({
+        char: "n",
+        description: "动能突破平均天数",
+        default: "1",
+    }),
+    profit: flags.string({
+        char: "p",
+        description: "动能突破买入波幅比例",
+        default: "0.5",
+    }),
+    loss: flags.string({
+        char: "l",
+        description: "动能突破卖出波幅比例",
+        default: "0.5",
+    }),
+    stoploss: flags.string({
+        char: "s",
+        description: "止损比例",
+        default: "0.1",
+    }),
+    lockprofit: flags.boolean({
+        char: "o",
+        description: "是否开盘盈利锁定",
+        default: true,
+    }),
+    fixcash: flags.boolean({
+        char: "f",
+        description: "是否固定头寸",
+        default: true,
+    }),
 };
 
 module.exports = StocksimCommand;
