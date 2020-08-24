@@ -50,7 +50,9 @@ function checkMMBBuyTransaction(
             2
         )}=${currentData.open}+${moment.toFixed(2)}*${P} [o: ${
             currentData.open
-        }, h: ${currentData.high}, l: ${currentData.low}]`
+        }, h: ${currentData.high}, l: ${currentData.low}, c: ${
+            currentData.close
+        }, d: ${currentData.tradeDate}]`
     );
     if (currentData.high >= targetPrice && currentData.open <= targetPrice) {
         // 执行买入交易
