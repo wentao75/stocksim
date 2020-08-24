@@ -23,7 +23,7 @@ class StocksimCommand extends Command {
         // this.log(
         //     `执行算法： ${name}, ${flags.n} ${flags.profit} ${flags.loss} ${flags.stoploss}`
         // );
-        this.log(`%o`, flags);
+        debug(`%o`, flags);
 
         let options = {
             fixCash: flags.fixcash, // 是否固定头寸
@@ -34,6 +34,7 @@ class StocksimCommand extends Command {
             L: Number(flags.loss), // 动能突破卖出百分比
             S: Number(flags.stoploss), // 止损比例
             OS: flags.lockprofit, // 是否执行开盘价锁盈
+            MB: flags.mmbbuy, //  是否动能突破买入符合禁止卖出
             mmbType: flags.mmbtype, // 波幅类型，hc, hl
             showTrans: flags.showtrans,
 
@@ -63,9 +64,9 @@ class StocksimCommand extends Command {
 动能平均天数 ${options.N}, 动能突破买入 ${options.P * 100}%, 动能突破卖出 ${
                 options.L * 100
             }%，
-止损比例 ${options.S * 100}%, 开盘盈利锁定：${options.OS}, 波幅类型 ${
-                options.mmbType === "hc" ? "最高-收盘" : "最高-最低"
-            }`
+止损比例 ${options.S * 100}%, 开盘盈利锁定：${options.OS}, 动能突破不卖出: ${
+                options.MB
+            }, 波幅类型 ${options.mmbType === "hc" ? "最高-收盘" : "最高-最低"}`
         );
 
         await simulate(options);
@@ -286,6 +287,10 @@ StocksimCommand.flags = {
     }),
     showtrans: flags.boolean({
         description: "是否显示交易列表",
+        default: false,
+    }),
+    mmbbuy: flags.boolean({
+        description: "如果动能突破买入成立则不卖出",
         default: false,
     }),
 };
