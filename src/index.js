@@ -16,6 +16,7 @@ class StocksimCommand extends Command {
         debug(`%o`, flags);
 
         let options = {
+            startDate: flags.startdate, // 模拟计算的启动日期
             fixCash: flags.fixcash, // 是否固定头寸
             initBalance: 1000000, // 初始资金余额 或 固定头寸金额
 
@@ -31,15 +32,16 @@ class StocksimCommand extends Command {
 
             stoploss: stoploss, // 止损算法设置
             selectedStocks: [
-                "600489.SH",
-                "600276.SH",
-                "600363.SH",
-                "000725.SZ",
-                "600298.SH",
-                "300027.SZ",
-                "600511.SH",
-                "601606.SH",
-                "601628.SH",
+                "600489.SH", // 中金黄金
+                "600276.SH", // 恒瑞医药
+                "600363.SH", // 联创光电
+                "000725.SZ", // 京东方A
+                "600298.SH", // 安琪酵母
+                "300027.SZ", // 华谊兄弟
+                "600511.SH", // 国药股份
+                "601606.SH", // 长城军工
+                "601628.SH", // 中国人寿
+                "000568.SZ", // 泸州老窖
             ],
         };
 
@@ -85,6 +87,11 @@ StocksimCommand.flags = {
     // add --help flag to show CLI version
     help: flags.help({ char: "h" }),
 
+    startdate: flags.string({
+        char: "d",
+        description: "模拟计算的启动日期",
+        default: "20190101",
+    }),
     n: flags.string({
         char: "n",
         description: "动能突破平均天数",
