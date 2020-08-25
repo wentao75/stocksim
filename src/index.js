@@ -16,21 +16,32 @@ class StocksimCommand extends Command {
         debug(`%o`, flags);
 
         let options = {
+            // 基本数据设置
             startDate: flags.startdate, // 模拟计算的启动日期
             fixCash: flags.fixcash, // 是否固定头寸
             initBalance: 1000000, // 初始资金余额 或 固定头寸金额
+            showTrans: flags.showtrans,
 
+            // 算法选择
+            // rules: {
+            //     buy: ["mmb"],
+            //     sell: ["stoploss", "mmb"],
+            // },
+            // mmb: {
             N: parseInt(flags.n), // 动能平均天数
             P: Number(flags.profit), // 动能突破买入百分比
             L: Number(flags.loss), // 动能突破卖出百分比
-            S: Number(flags.stoploss), // 止损比例
             nommb1: flags.nommb1, // 是否执行开盘价锁盈
             nommb2: flags.nommb2, //  是否动能突破买入符合禁止卖出
-            nommbsell: flags.nommbsell, // 如果动能突破，则禁止卖出
+            // nommbsell: flags.nommbsell, // 如果动能突破，则禁止卖出
             mmbType: flags.mmbtype, // 波幅类型，hc, hl
-            showTrans: flags.showtrans,
+            // },
+            // stoploss: {
+            S: Number(flags.stoploss), // 止损比例
+            // },
 
             stoploss: stoploss, // 止损算法设置
+
             selectedStocks: [
                 "600489.SH", // 中金黄金
                 "600276.SH", // 恒瑞医药
@@ -58,11 +69,11 @@ class StocksimCommand extends Command {
 
 卖出规则：
 1. [✅] 止损
-2. [${options.nommbsell ? "🚫" : "✅"}] 满足动能突破买入时不再卖出
-3. [${options.nommb1 ? "🚫" : "✅"}] 开盘盈利锁定
-4. [${options.nommb2 ? "🚫" : "✅"}] 动能向下突破卖出
+2. [${options.nommb1 ? "🚫" : "✅"}] 开盘盈利锁定
+3. [${options.nommb2 ? "🚫" : "✅"}] 动能向下突破卖出
 `
         );
+        // 2. [${options.nommbsell ? "🚫" : "✅"}] 满足动能突破买入时不再卖出
 
         await simulate(options);
     }
@@ -135,10 +146,10 @@ StocksimCommand.flags = {
         description: "卖出规则不使用动能突破",
         default: false,
     }),
-    nommbsell: flags.boolean({
-        description: "不使用规则：如果当日符合动能突破买入，则不卖出",
-        default: false,
-    }),
+    // nommbsell: flags.boolean({
+    //     description: "不使用规则：如果当日符合动能突破买入，则不卖出",
+    //     default: false,
+    // }),
 };
 
 module.exports = StocksimCommand;
