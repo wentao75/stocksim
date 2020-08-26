@@ -4,7 +4,7 @@ const moment = require("moment");
 const _ = require("lodash");
 const debug = require("debug")("main");
 
-const { simulate, stoploss, formatFxstr } = require("@wt/lib-stock");
+const { simulate, rules, formatFxstr } = require("@wt/lib-stock");
 
 class StocksimCommand extends Command {
     async run() {
@@ -23,54 +23,67 @@ class StocksimCommand extends Command {
             showTrans: flags.showtrans,
 
             // 算法选择
-            // rules: {
-            //     buy: ["mmb"],
-            //     sell: ["stoploss", "mmb"],
-            // },
-            // mmb: {
-            N: parseInt(flags.n), // 动能平均天数
-            P: Number(flags.profit), // 动能突破买入百分比
-            L: Number(flags.loss), // 动能突破卖出百分比
-            nommb1: flags.nommb1, // 是否执行开盘价锁盈
-            nommb2: flags.nommb2, //  是否动能突破买入符合禁止卖出
-            // nommbsell: flags.nommbsell, // 如果动能突破，则禁止卖出
-            mmbType: flags.mmbtype, // 波幅类型，hc, hl
-            // },
-            // stoploss: {
-            S: Number(flags.stoploss), // 止损比例
-            // },
+            rules: {
+                buy: [rules.mmb],
+                sell: [rules.stoploss, rules.mmb],
+            },
+            mmb: {
+                N: parseInt(flags.n), // 动能平均天数
+                P: Number(flags.profit), // 动能突破买入百分比
+                L: Number(flags.loss), // 动能突破卖出百分比
+                nommb1: flags.nommb1, // 是否执行开盘价锁盈
+                nommb2: !flags.mmb2, //  是否动能突破买入符合禁止卖出
+                // nommbsell: flags.nommbsell, // 如果动能突破，则禁止卖出
+                mmbType: flags.mmbtype, // 波幅类型，hc, hl
+            },
+            stoploss: {
+                S: Number(flags.stoploss), // 止损比例
+            },
 
-            stoploss: stoploss, // 止损算法设置
+            // stoploss: stoploss, // 止损算法设置
 
             selectedStocks: [
                 "600489.SH", // 中金黄金
-                "600276.SH", // 恒瑞医药
-                "600363.SH", // 联创光电
-                "000725.SZ", // 京东方A
-                "600298.SH", // 安琪酵母
-                "300027.SZ", // 华谊兄弟
-                "600511.SH", // 国药股份
-                "601606.SH", // 长城军工
-                "601628.SH", // 中国人寿
-                "000568.SZ", // 泸州老窖
+                // "600276.SH", // 恒瑞医药
+                // "600363.SH", // 联创光电
+                // "000725.SZ", // 京东方A
+                // "600298.SH", // 安琪酵母
+                // "300027.SZ", // 华谊兄弟
+                // "600511.SH", // 国药股份
+                // "601606.SH", // 长城军工
+                // "601628.SH", // 中国人寿
+                // "000568.SZ", // 泸州老窖
             ],
         };
+
+        let sells = "";
+        for (let rule of options.rules.sell) {
+            sells += `${rule.name}, `;
+        }
+        let buys = "";
+        for (let rule of options.rules.buy) {
+            buys += `${rule.name}, `;
+        }
 
         this.log(
             `初始资金:        ${formatFxstr(options.initBalance)}元 
 测试交易资金模式:  ${options.fixCash ? "固定头寸" : "累计账户"}
 
-模型参数：
-波幅类型 [${options.mmbType === "hc" ? "最高-收盘" : "最高-最低"}]
-动能平均天数: ${options.N}
-动能突破买入比例: ${options.P * 100}%
-动能突破卖出比例: ${options.L * 100}%
-止损比例: ${options.S * 100}%
+规则：
+买入模型：${buys}
+卖出模型：${sells}
 
-卖出规则：
-1. [✅] 止损
-2. [${options.nommb1 ? "🚫" : "✅"}] 开盘盈利锁定
-3. [${options.nommb2 ? "🚫" : "✅"}] 动能向下突破卖出
+模型 ${rules.mmb.name} 参数：
+波幅类型 [${options.mmb.mmbType === "hc" ? "最高-收盘" : "最高-最低"}]
+动能平均天数: ${options.mmb.N}
+动能突破买入比例: ${options.mmb.P * 100}%
+动能突破卖出比例: ${options.mmb.L * 100}%
+规则：
+1. [${options.mmb.nommb1 ? "🚫" : "✅"}] 开盘盈利锁定
+2. [${options.mmb.nommb2 ? "🚫" : "✅"}] 动能向下突破卖出
+
+模型 ${rules.stoploss.name} 参数：
+止损比例: ${options.stoploss.S * 100}%
 `
         );
         // 2. [${options.nommbsell ? "🚫" : "✅"}] 满足动能突破买入时不再卖出
@@ -142,8 +155,8 @@ StocksimCommand.flags = {
         description: "卖出规则不使用开盘盈利锁定",
         default: false,
     }),
-    nommb2: flags.boolean({
-        description: "卖出规则不使用动能突破",
+    mmb2: flags.boolean({
+        description: "卖出规则使用动能突破",
         default: false,
     }),
     // nommbsell: flags.boolean({
