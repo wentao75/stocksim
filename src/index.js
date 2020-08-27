@@ -4,7 +4,13 @@ const moment = require("moment");
 const _ = require("lodash");
 const debug = require("debug")("main");
 
-const { simulate, rules, formatFxstr } = require("@wt/lib-stock");
+const {
+    simulate,
+    rules,
+    formatFxstr,
+    engine,
+    reports,
+} = require("@wt/lib-stock");
 
 class StocksimCommand extends Command {
     async run() {
@@ -21,12 +27,20 @@ class StocksimCommand extends Command {
             fixCash: flags.fixcash, // 是否固定头寸
             initBalance: 1000000, // 初始资金余额 或 固定头寸金额
             showTrans: flags.showtrans,
+            showWorkdays: flags.showworkdays,
 
             // 算法选择
+            // 基准测试
             rules: {
-                buy: [rules.mmb],
-                sell: [rules.stoploss, rules.mmb],
+                buy: [rules.benchmark],
+                // sell: [rules.stoploss, rules.benchmark],
+                sell: [rules.benchmark],
             },
+            // mmb
+            // rules: {
+            //     buy: [rules.mmb],
+            //     sell: [rules.stoploss, rules.mmb],
+            // },
             mmb: {
                 N: parseInt(flags.n), // 动能平均天数
                 P: Number(flags.profit), // 动能突破买入百分比
@@ -39,30 +53,44 @@ class StocksimCommand extends Command {
             stoploss: {
                 S: Number(flags.stoploss), // 止损比例
             },
-
-            // stoploss: stoploss, // 止损算法设置
+            benchmark: {
+                sellPrice: "open", //"close", // 卖出价位
+            },
 
             selectedStocks: [
                 "600489.SH", // 中金黄金
-                // "600276.SH", // 恒瑞医药
-                // "600363.SH", // 联创光电
-                // "000725.SZ", // 京东方A
-                // "600298.SH", // 安琪酵母
-                // "300027.SZ", // 华谊兄弟
-                // "600511.SH", // 国药股份
-                // "601606.SH", // 长城军工
-                // "601628.SH", // 中国人寿
-                // "000568.SZ", // 泸州老窖
+                "600276.SH", // 恒瑞医药
+                "600363.SH", // 联创光电
+                "000725.SZ", // 京东方A
+                "600298.SH", // 安琪酵母
+                "300027.SZ", // 华谊兄弟
+                "600511.SH", // 国药股份
+                "601606.SH", // 长城军工
+                "601628.SH", // 中国人寿
+                "000568.SZ", // 泸州老窖
             ],
         };
+
+        let buys = "";
+        let usedRules = {};
+        for (let rule of options.rules.buy) {
+            buys += `${rule.name}, `;
+            if (!(rule.label in usedRules)) {
+                usedRules[rule.label] = rule;
+            }
+        }
 
         let sells = "";
         for (let rule of options.rules.sell) {
             sells += `${rule.name}, `;
+            if (!(rule.label in usedRules)) {
+                usedRules[rule.label] = rule;
+            }
         }
-        let buys = "";
-        for (let rule of options.rules.buy) {
-            buys += `${rule.name}, `;
+
+        let rules_desc = "";
+        for (let label in usedRules) {
+            rules_desc += usedRules[label].showOptions(options);
         }
 
         this.log(
@@ -73,19 +101,21 @@ class StocksimCommand extends Command {
 买入模型：${buys}
 卖出模型：${sells}
 
-模型 ${rules.mmb.name} 参数：
-波幅类型 [${options.mmb.mmbType === "hc" ? "最高-收盘" : "最高-最低"}]
-动能平均天数: ${options.mmb.N}
-动能突破买入比例: ${options.mmb.P * 100}%
-动能突破卖出比例: ${options.mmb.L * 100}%
-规则：
-1. [${options.mmb.nommb1 ? "🚫" : "✅"}] 开盘盈利锁定
-2. [${options.mmb.nommb2 ? "🚫" : "✅"}] 动能向下突破卖出
-
-模型 ${rules.stoploss.name} 参数：
-止损比例: ${options.stoploss.S * 100}%
+${rules_desc}
 `
         );
+        // 模型 ${rules.mmb.name} 参数：
+        // 波幅类型 [${options.mmb.mmbType === "hc" ? "最高-收盘" : "最高-最低"}]
+        // 动能平均天数: ${options.mmb.N}
+        // 动能突破买入比例: ${options.mmb.P * 100}%
+        // 动能突破卖出比例: ${options.mmb.L * 100}%
+        // 规则：
+        // 1. [${options.mmb.nommb1 ? "🚫" : "✅"}] 开盘盈利锁定
+        // 2. [${options.mmb.nommb2 ? "🚫" : "✅"}] 动能向下突破卖出
+
+        // 模型 ${rules.stoploss.name} 参数：
+        // 止损比例: ${options.stoploss.S * 100}%
+        // `
         // 2. [${options.nommbsell ? "🚫" : "✅"}] 满足动能突破买入时不再卖出
 
         await simulate(options);
@@ -149,6 +179,10 @@ StocksimCommand.flags = {
     }),
     showtrans: flags.boolean({
         description: "是否显示交易列表",
+        default: false,
+    }),
+    showworkdays: flags.boolean({
+        description: "是否显示工作日报表",
         default: false,
     }),
     nommb1: flags.boolean({
