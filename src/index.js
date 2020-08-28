@@ -12,6 +12,9 @@ const {
     reports,
 } = require("@wt/lib-stock");
 
+// process.env["NODE_CONFIG_DIR"] = __dirname;
+// const options = require("config");
+
 class StocksimCommand extends Command {
     async run() {
         const { flags } = this.parse(StocksimCommand);
@@ -21,55 +24,67 @@ class StocksimCommand extends Command {
         // );
         debug(`%o`, flags);
 
-        let options = {
-            // 基本数据设置
-            startDate: flags.startdate, // 模拟计算的启动日期
-            fixCash: flags.fixcash, // 是否固定头寸
-            initBalance: 1000000, // 初始资金余额 或 固定头寸金额
-            showTrans: flags.showtrans,
-            showWorkdays: flags.showworkdays,
+        // 通过配置文件获得对应的基础配置信息
+        const options = require("config");
 
-            // 算法选择
-            // 基准测试
-            rules: {
-                buy: [rules.benchmark],
-                // sell: [rules.stoploss, rules.benchmark],
-                sell: [rules.benchmark],
-            },
-            // mmb
-            // rules: {
-            //     buy: [rules.mmb],
-            //     sell: [rules.stoploss, rules.mmb],
-            // },
-            mmb: {
-                N: parseInt(flags.n), // 动能平均天数
-                P: Number(flags.profit), // 动能突破买入百分比
-                L: Number(flags.loss), // 动能突破卖出百分比
-                nommb1: flags.nommb1, // 是否执行开盘价锁盈
-                nommb2: !flags.mmb2, //  是否动能突破买入符合禁止卖出
-                // nommbsell: flags.nommbsell, // 如果动能突破，则禁止卖出
-                mmbType: flags.mmbtype, // 波幅类型，hc, hl
-            },
-            stoploss: {
-                S: Number(flags.stoploss), // 止损比例
-            },
-            benchmark: {
-                sellPrice: "open", //"close", // 卖出价位
-            },
+        // 通过命令后参数，对配置参数进行一些调整
+        if (flags.startdate) options.startDate = flags.startdate;
+        if (flags.fixcash !== undefined) options.fixCash = flags.fixcash;
+        if (flags.showtrans !== undefined) options.showTrans = flags.showtrans;
+        if (flags.showworkdays !== undefined)
+            options.showWorkdays = flags.showworkdays;
 
-            selectedStocks: [
-                "600489.SH", // 中金黄金
-                "600276.SH", // 恒瑞医药
-                "600363.SH", // 联创光电
-                "000725.SZ", // 京东方A
-                "600298.SH", // 安琪酵母
-                "300027.SZ", // 华谊兄弟
-                "600511.SH", // 国药股份
-                "601606.SH", // 长城军工
-                "601628.SH", // 中国人寿
-                "000568.SZ", // 泸州老窖
-            ],
-        };
+        if (flags.stoploss) options.stoploss.S = Number(flags.stoploss);
+
+        // let options = {
+        //     // 基本数据设置
+        //     startDate: flags.startdate, // 模拟计算的启动日期
+        //     fixCash: flags.fixcash, // 是否固定头寸
+        //     initBalance: 1000000, // 初始资金余额 或 固定头寸金额
+        //     showTrans: flags.showtrans,
+        //     showWorkdays: flags.showworkdays,
+
+        //     // 算法选择
+        //     // 基准测试
+        //     rules: {
+        //         buy: [rules.benchmark],
+        //         // sell: [rules.stoploss, rules.benchmark],
+        //         sell: [rules.benchmark],
+        //     },
+        //     // mmb
+        //     // rules: {
+        //     //     buy: [rules.mmb],
+        //     //     sell: [rules.stoploss, rules.mmb],
+        //     // },
+        //     mmb: {
+        //         N: parseInt(flags.n), // 动能平均天数
+        //         P: Number(flags.profit), // 动能突破买入百分比
+        //         L: Number(flags.loss), // 动能突破卖出百分比
+        //         nommb1: flags.nommb1, // 是否执行开盘价锁盈
+        //         nommb2: !flags.mmb2, //  是否动能突破买入符合禁止卖出
+        //         // nommbsell: flags.nommbsell, // 如果动能突破，则禁止卖出
+        //         mmbType: flags.mmbtype, // 波幅类型，hc, hl
+        //     },
+        //     stoploss: {
+        //         S: Number(flags.stoploss), // 止损比例
+        //     },
+        //     benchmark: {
+        //         sellPrice: "open", //"close", // 卖出价位
+        //     },
+
+        //     selectedStocks: [
+        //         "600489.SH", // 中金黄金
+        //         "600276.SH", // 恒瑞医药
+        //         "600363.SH", // 联创光电
+        //         "000725.SZ", // 京东方A
+        //         "600298.SH", // 安琪酵母
+        //         "300027.SZ", // 华谊兄弟
+        //         "600511.SH", // 国药股份
+        //         "601606.SH", // 长城军工
+        //         "601628.SH", // 中国人寿
+        //         "000568.SZ", // 泸州老窖
+        //     ],
+        // };
 
         let buys = "";
         let usedRules = {};
@@ -144,54 +159,58 @@ StocksimCommand.flags = {
     startdate: flags.string({
         char: "d",
         description: "模拟计算的启动日期",
-        default: "20190101",
+        // default: "20190101",
     }),
     n: flags.string({
         char: "n",
         description: "动能突破平均天数",
-        default: "1",
+        // default: "1",
     }),
     profit: flags.string({
         char: "p",
         description: "动能突破买入波幅比例",
-        default: "0.5",
+        // default: "0.5",
     }),
     loss: flags.string({
         char: "l",
         description: "动能突破卖出波幅比例",
-        default: "0.5",
+        // default: "0.5",
     }),
     stoploss: flags.string({
         char: "s",
         description: "止损比例",
-        default: "0.1",
+        // default: "0.1",
     }),
     fixcash: flags.boolean({
         // char: "f",
         description: "是否固定头寸",
-        default: true,
+        // default: true,
         allowNo: true,
     }),
     mmbtype: flags.string({
         char: "t",
         description: "MMB算法波幅类型，hc|hl",
-        default: "hl",
+        // default: "hl",
     }),
     showtrans: flags.boolean({
         description: "是否显示交易列表",
-        default: false,
+        // default: false,
+        allowNo: true,
     }),
     showworkdays: flags.boolean({
         description: "是否显示工作日报表",
-        default: false,
+        // default: false,
+        allowNo: true,
     }),
     nommb1: flags.boolean({
         description: "卖出规则不使用开盘盈利锁定",
-        default: false,
+        // default: false,
+        allowNo: true,
     }),
     mmb2: flags.boolean({
         description: "卖出规则使用动能突破",
-        default: false,
+        // default: false,
+        allowNo: true,
     }),
     // nommbsell: flags.boolean({
     //     description: "不使用规则：如果当日符合动能突破买入，则不卖出",
