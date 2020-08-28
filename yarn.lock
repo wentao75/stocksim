@@ -612,10 +612,10 @@ concat-map@0.0.1:
   resolved "https://registry.yarnpkg.com/concat-map/-/concat-map-0.0.1.tgz#d8a96bd77fd68df7793a73036a3ba0d5405d477b"
   integrity sha1-2Klr13/Wjfd5OnMDajug1UBdR3s=
 
-console-table-printer@^2.3.21:
-  version "2.3.21"
-  resolved "https://registry.npm.taobao.org/console-table-printer/download/console-table-printer-2.3.21.tgz#28c4739f2b04575f757fe84d030e597cac0136a6"
-  integrity sha1-KMRznysEV191f+hNAw5ZfKwBNqY=
+console-grid@^1.0.16:
+  version "1.0.16"
+  resolved "https://registry.yarnpkg.com/console-grid/-/console-grid-1.0.16.tgz#dd8cc20c0cea2222026f5b6c77c6a4f8fbe7d744"
+  integrity sha512-1W+KHJ3aqqwT5OwKme1OEc/3cYJCR3rc23gn47Lml2ZRpF6I2ozs12LkqsDFfAZ7ErcGllUWC5aZnJ7zeU9LtA==
 
 content-type@^1.0.4:
   version "1.0.4"

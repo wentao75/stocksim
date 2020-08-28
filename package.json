@@ -11,7 +11,7 @@
     "@oclif/command": "^1",
     "@oclif/config": "^1",
     "@oclif/plugin-help": "^3",
-    "console-table-printer": "^2.3.21",
+    "console-grid": "^1.0.16",
     "lodash": "^4.17.20",
     "moment": "^2.27.0"
   },
