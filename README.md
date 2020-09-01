@@ -1,6 +1,7 @@
 stocksim
 ========
 
+功能合并到wtda sim中
 Algorithm for stock data
 
 [![oclif](https://img.shields.io/badge/cli-oclif-brightgreen.svg)](https://oclif.io)
@@ -9,8 +10,9 @@ Algorithm for stock data
 [![License](https://img.shields.io/npm/l/stocksim.svg)](https://github.com/wentao75/stocksim/blob/master/package.json)
 
 <!-- toc -->
-* [Usage](#usage)
-* [Commands](#commands)
+- [stocksim](#stocksim)
+- [Usage](#usage)
+- [Commands](#commands)
 <!-- tocstop -->
 # Usage
 <!-- usage -->
